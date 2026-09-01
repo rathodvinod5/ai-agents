@@ -96,3 +96,54 @@ async function managerAsTool() {
 // managerAsTool().catch((err) => console.log("ERR: \n", err));
 
 // Dynamic instructions
+async function dynamicInstructions(runContext) {
+  const { name, tier, location } = runContext.context;
+
+  let instructions = `You are Personal assistent, please answer the user 
+    query effectively`;
+  if (tier == "pro") {
+    instructions += `\n- The user is a premium tier subscriber. 
+      Provide deep, comprehensive, and advanced details.`;
+  } else {
+    instructions += `\n- The user is on the free tier. Keep answers 
+      concise and remind them briefly about upgrading if appropriate.`;
+  }
+  return instructions;
+}
+
+async function dynamicInstructionsDemo() {
+  const agent = new Agent({
+    name: "Personal agent",
+    instructions: dynamicInstructions,
+    model: "gpt-4o-mini",
+  });
+
+  let query = "Explain me in short, what is PDA in Solana?";
+  let result = await run(agent, query, {
+    context: {
+      name: "John Doe",
+      location: "Pune, India",
+      tier: "pro",
+    },
+  });
+  if (result.finalOutput) {
+    console.log("Pro ouput: ", result.finalOutput);
+  } else {
+    console.log("No output");
+  }
+
+  let query = "Can you explain quantum computing briefly?";
+  const freeResult = await run(agent, query, {
+    context: {
+      name: "Bob",
+      tier: "free",
+      location: "London",
+    },
+  });
+  if (freeResult.finalOutput) {
+    console.log("Free ouput: ", freeResult.finalOutput);
+  } else {
+    console.log("No output");
+  }
+}
+dynamicInstructionsDemo().catch((error) => console.log("Error: ", error));
