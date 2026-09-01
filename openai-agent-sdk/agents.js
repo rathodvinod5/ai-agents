@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Agent, run } from "@openai/agents";
+import { Agent, run, tool } from "@openai/agents";
 import { z } from "zod";
 
 // Agent context
@@ -132,8 +132,8 @@ async function dynamicInstructionsDemo() {
     console.log("No output");
   }
 
-  let query = "Can you explain quantum computing briefly?";
-  const freeResult = await run(agent, query, {
+  let freeQuery = "Can you explain quantum computing briefly?";
+  const freeResult = await run(agent, freeQuery, {
     context: {
       name: "Bob",
       tier: "free",
@@ -146,4 +146,93 @@ async function dynamicInstructionsDemo() {
     console.log("No output");
   }
 }
-dynamicInstructionsDemo().catch((error) => console.log("Error: ", error));
+// dynamicInstructionsDemo().catch((error) => console.log("Error: ", error));
+
+async function agentLifeCycleHooks() {
+  const historyTool = tool({
+    name: "HistoryTool",
+    description: "Give me some fun fact about the history",
+    parameters: z.object(),
+    execute: () => "Sharks are older then trees",
+  });
+  const historyAgent = new Agent({
+    name: "History Agent",
+    instructions: `You provide assistant with the historical queries, 
+      Explain the important events clearly and concisely`,
+    tools: [historyTool],
+  });
+
+  const calculatorTool = tool({
+    name: "CalculatorTool",
+    description: "Please add two numbers return the result",
+    parameters: z.object({
+      left: z.number(),
+      right: z.number(),
+    }),
+    execute: async ({ left, right }) => left + right,
+  });
+  const billingAgent = new Agent({
+    name: "Billing Agent",
+    instructions: `You are a accounting specialist, Use CalculatorTool 
+      to calculate outstanding bills`,
+    tool: [calculatorTool],
+  });
+
+  const triageAgent = Agent.create({
+    name: "Triage Agent",
+    instructions: `Determine the user query. If it involves math or math billing,
+      hand off to the Billing Agent. If it involves any history info, handoff to 
+      the History Agent`,
+    handoffs: [billingAgent, historyAgent],
+  });
+
+  triageAgent.on("agent_start", (ctx, agent) => {
+    console.log(`${agent.name} agent started`);
+  });
+  triageAgent.on("agent_handoff", (ctx, agent) => {
+    console.log(`handingoff to ${agent.name} agent`);
+  });
+
+  billingAgent.on("agent_tool_start", (ctx, toolInstance, { toolCall }) => {
+    console.log(
+      `[Lifecycle] ${billingAgent.name} is running tool: "${toolInstance.name}" with arguments:`,
+    );
+  });
+
+  billingAgent.on(
+    "agent_tool_end",
+    (ctx, toolInstance, result, { toolCall }) => {
+      console.log(
+        `Tool "${toolInstance.name}" execution complete. Result returned: "${result}"`,
+      );
+    },
+  );
+  billingAgent.on("agent_end", (ctx, output) => {
+    console.log(`${billingAgent.name} has finished execution.`);
+  });
+
+  const myAppContext = {
+    logger: (message) => console.log(`[APP LOG] ${message}`),
+  };
+
+  // let userQuery = `Hi, I need to know what 455 plus 545 is for my billing invoice.`;
+  // let result = await run(triageAgent, userQuery, {
+  //   context: myAppContext,
+  // });
+  // if (result.finalOutput) {
+  //   console.log("Final output: ", result.finalOutput);
+  // } else {
+  //   console.log("No output");
+  // }
+
+  let userQuery = `Hi, tell me something about history, specially about sharks`;
+  let result = await run(triageAgent, userQuery, {
+    context: myAppContext,
+  });
+  if (result.finalOutput) {
+    console.log("Final output: ", result.finalOutput);
+  } else {
+    console.log("No output");
+  }
+}
+agentLifeCycleHooks().catch((error) => console.log("ERR: ", error));
