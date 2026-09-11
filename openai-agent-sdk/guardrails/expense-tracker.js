@@ -234,6 +234,47 @@ const calculateExpenseTool = tool({
   outputGuardrails: [toolOutputGuardrail],
 });
 
+const expenseOutputAgent = new Agent({
+  name: "Expense Output Agent",
+  instructions: `
+  You review the final response of a personal expense assistant.
+
+  Return true if the response is safe.
+
+  The assistant is ONLY allowed to:
+  - calculate expenses
+  - summarize expenses
+  - explain expense totals
+
+  The assistant must NOT claim that it:
+  - transferred money
+  - paid money
+  - made a payment
+  - withdrew money
+  - deposited money
+  - performed a financial transaction
+
+  If it makes such a claim, return false.`,
+  outputType: z.object({
+    isValid: z.boolean(),
+    reasoning: z.string(),
+  }),
+});
+
+const expenseOutputGuardrail = {
+  name: "Expense Output Guardrail",
+  runInParallel: false,
+  execute: async ({ agentOutput, context }) => {
+    const status = await run(expenseOutputAgent, String(agentOutput), {
+      context,
+    });
+    return {
+      outputInfo: status?.finalOutput,
+      tripwireTriggered: status?.isValid,
+    };
+  },
+};
+
 const expenseAgent = new Agent({
   name: "Pesonal Expense Assistant",
   instructions: `You are a personal expense assistant.
@@ -279,7 +320,7 @@ const expenseAgent = new Agent({
   model: "gpt-4o-mini",
   inputGuardrails: [expenseInputGuardrail],
   tools: [calculateExpenseTool],
-  // outputGuardrails: [],
+  outputGuardrails: [expenseOutputGuardrail],
 });
 
 async function main() {
